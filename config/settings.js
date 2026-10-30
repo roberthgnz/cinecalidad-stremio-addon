@@ -80,6 +80,10 @@ function getManifest() {
       },
     ],
     idPrefixes: config.addon.idPrefixes,
+    stremioAddonsConfig: {
+      issuer: "https://stremio-addons.net",
+      signature: "eyJhbGciOiJkaXIiLCJlbmMiOiJBMTI4Q0JDLUhTMjU2In0..UztY6fApYLyzz93FY9Nr9g.9ZXUsQSp97BcZ18FBKEgEClqrJpu0KSQlC38F-D2H1mucEx0k2-KlPV9ZwKcUYqMpubIRiQW955m7UbC8XiWDuGu5c9QIXQm_lWz-zVBQFE_IJZnYO9vhCzf2u3bLokJ.hE3Ox95UvWT0svWfsoWXDA"
+    }
   };
 }
 

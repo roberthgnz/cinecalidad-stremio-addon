@@ -2,9 +2,6 @@
 
 A Stremio addon for streaming movies from Cinecalidad.
 
-[![CI/CD Pipeline](https://github.com/rxb3rth/cinecalidad-stremio-addon/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/rxb3rth/cinecalidad-stremio-addon/actions/workflows/ci-cd.yml)
-[![Release and Deploy](https://github.com/rxb3rth/cinecalidad-stremio-addon/actions/workflows/release-deploy.yml/badge.svg)](https://github.com/rxb3rth/cinecalidad-stremio-addon/actions/workflows/release-deploy.yml)
-
 ## 🏗️ Architecture
 
 This addon follows enterprise-grade patterns with proper separation of concerns:
