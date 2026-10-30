@@ -247,6 +247,118 @@ describe("Handler Architecture", () => {
       expect(result).toHaveProperty("streams");
       expect(Array.isArray(result.streams)).toBe(true);
     });
+
+    describe("IMDb ids", () => {
+      const downloadLinks = [
+        { name: "Descarga 1080p", url: "https://example.com/dl" },
+      ];
+
+      beforeEach(() => {
+        mockDependencies.database.findMovieByImdbId = jest.fn();
+        mockDependencies.metadataService.getMovieMetadata.mockResolvedValue({
+          originalTitle: "Remarkably Bright Creatures",
+          year: "2026",
+        });
+        mockDependencies.cineCalidadService.performQuery.mockResolvedValue([
+          {
+            id: "criaturas-luminosas-2025",
+            year: "2023",
+            detailsLink: "https://site/old",
+          },
+          {
+            id: "criaturas-luminosas-2026",
+            year: "2026",
+            detailsLink: "https://site/new",
+          },
+          {
+            id: "criaturas-luminosas-2026_4k",
+            year: "2026",
+            detailsLink: "https://site/new",
+          },
+        ]);
+      });
+
+      test("finds the release by Cinemeta title and confirms the IMDb id", async () => {
+        mockDependencies.cineCalidadService.getMovieDetails.mockResolvedValue({
+          imdbId: "tt1",
+          downloadLinks,
+        });
+
+        const result = await handler.handle({ type: "movie", id: "tt1" });
+
+        expect(
+          mockDependencies.cineCalidadService.performQuery,
+        ).toHaveBeenCalledWith(
+          expect.objectContaining({
+            search: "Remarkably Bright Creatures",
+            matchTitle: false,
+            maxPages: 1,
+          }),
+        );
+        // Only the same-year, non-4K candidate is opened
+        expect(
+          mockDependencies.cineCalidadService.getMovieDetails,
+        ).toHaveBeenCalledTimes(1);
+        expect(
+          mockDependencies.cineCalidadService.getMovieDetails,
+        ).toHaveBeenCalledWith("https://site/new");
+        expect(result.streams).toHaveLength(1);
+        expect(result.streams[0].externalUrl).toBe("https://example.com/dl");
+        expect(mockDependencies.database.saveMovie).toHaveBeenCalledWith(
+          "tt1",
+          expect.objectContaining({
+            release: expect.not.objectContaining({
+              movieDetails: expect.anything(),
+            }),
+          }),
+        );
+      });
+
+      test("rejects a candidate whose page links another IMDb id", async () => {
+        mockDependencies.cineCalidadService.getMovieDetails.mockResolvedValue({
+          imdbId: "tt999",
+          downloadLinks,
+        });
+
+        const result = await handler.handle({ type: "movie", id: "tt1" });
+
+        expect(result).toEqual({ streams: [] });
+        // The miss is cached so the site is not scraped on every view
+        expect(mockDependencies.database.setCache).toHaveBeenCalledWith(
+          "stream_tt1",
+          { streams: [] },
+          handler.MISSING_IMDB_CACHE_MINUTES,
+        );
+      });
+
+      test("reuses a movie saved under its cc_ id", async () => {
+        mockDependencies.database.findMovieByImdbId.mockResolvedValue({
+          movieDetails: { imdbId: "tt1", downloadLinks },
+        });
+
+        const result = await handler.handle({ type: "movie", id: "tt1" });
+
+        expect(result.streams).toHaveLength(1);
+        expect(
+          mockDependencies.cineCalidadService.performQuery,
+        ).not.toHaveBeenCalled();
+      });
+    });
+  });
+});
+
+describe("DatabaseService.findMovieByImdbId", () => {
+  const { getInstance } = require("../lib/database");
+
+  test("finds a movie stored under another id by its IMDb id", async () => {
+    const db = getInstance();
+    await db.saveMovie("cc_some-movie", {
+      movieDetails: { imdbId: "tt7654321", downloadLinks: [] },
+    });
+
+    const movie = await db.findMovieByImdbId("tt7654321");
+    expect(movie.movieDetails.imdbId).toBe("tt7654321");
+    expect(await db.findMovieByImdbId("tt0000000")).toBeNull();
   });
 });
 

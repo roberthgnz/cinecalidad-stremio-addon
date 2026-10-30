@@ -32,6 +32,9 @@ class CineCalidadService {
    * @param {string} query.search - Search term
    * @param {number} query.skip - Number of items to skip
    * @param {number} query.limit - Maximum items to return
+   * @param {number} [query.maxPages] - Override the page limit
+   * @param {boolean} [query.matchTitle] - false keeps results whose card title
+   *   does not contain the search words (the site also matches original titles)
    * @returns {Promise<Array>} Array of movie releases
    */
   async performQuery(query = {}) {
@@ -39,9 +42,9 @@ class CineCalidadService {
 
     const releases = [];
     const isSearch = query.search && query.search.trim().length > 0;
-    const maxPages = isSearch
-      ? this.maxSearchPageLimit
-      : this.maxLatestPageLimit;
+    const maxPages =
+      query.maxPages ||
+      (isSearch ? this.maxSearchPageLimit : this.maxLatestPageLimit);
 
     logger.debug(
       `[performQuery] Search mode: ${isSearch}, Max pages: ${maxPages}`,
@@ -208,7 +211,11 @@ class CineCalidadService {
         console.log(`  Link href: "${$link.attr("href")}"`);
 
         // Skip if title doesn't match search query
-        if (query.search && !this.checkTitleMatchWords(query.search, title)) {
+        if (
+          query.search &&
+          query.matchTitle !== false &&
+          !this.checkTitleMatchWords(query.search, title)
+        ) {
           return;
         }
 

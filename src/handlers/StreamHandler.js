@@ -53,6 +53,8 @@ class StreamHandler {
       "UY",
     ];
     this.BINGE_GROUP_PREFIX = "cinecalidad-";
+    this.MAX_IMDB_CANDIDATES = 3;
+    this.MISSING_IMDB_CACHE_MINUTES = 6 * 60;
 
     // Bind methods
     this.handle = this.handle.bind(this);
@@ -83,7 +85,17 @@ class StreamHandler {
       // Get or fetch movie data
       const movieData = await this._getMovieData(args.id);
       if (!movieData) {
-        return { streams: [] };
+        const result = { streams: [] };
+        // Most IMDb ids are not on Cinecalidad; avoid re-scraping on every view
+        if (args.id.startsWith("tt")) {
+          await this.cacheService.set(
+            cacheKey,
+            result,
+            {},
+            this.MISSING_IMDB_CACHE_MINUTES,
+          );
+        }
+        return result;
       }
 
       // Process streams
@@ -147,6 +159,15 @@ class StreamHandler {
       return savedMovie;
     }
 
+    // An IMDb id may already be known from a cc_ lookup
+    if (id.startsWith("tt") && this.database.findMovieByImdbId) {
+      const linkedMovie = await this.database.findMovieByImdbId(id);
+      if (linkedMovie && linkedMovie.movieDetails) {
+        logger.debug("Found movie by IMDb id in database", { id });
+        return linkedMovie;
+      }
+    }
+
     // Fetch from service
     return this._fetchMovieData(id);
   }
@@ -165,10 +186,15 @@ class StreamHandler {
         return null;
       }
 
-      // Get detailed movie information
-      const movieDetails = await this.cineCalidadService.getMovieDetails(
-        release.detailsLink,
-      );
+      // Get detailed movie information (IMDb lookups already fetched it)
+      const { movieDetails: prefetched, ...releaseInfo } = release;
+      const movieDetails =
+        prefetched ||
+        (await this.cineCalidadService.getMovieDetails(release.detailsLink));
+      if (!movieDetails) {
+        logger.warn("Movie details not available", { id });
+        return null;
+      }
 
       // Enrich with external metadata if available
       await this._enrichWithExternalMetadata(movieDetails, id);
@@ -176,7 +202,7 @@ class StreamHandler {
       // Save to database
       const movieData = {
         movieDetails,
-        release,
+        release: releaseInfo,
         externalMeta: movieDetails.externalMeta,
         lastUpdated: new Date().toISOString(),
       };
@@ -226,31 +252,55 @@ class StreamHandler {
   }
 
   /**
-   * Find IMDB release
+   * Find the Cinecalidad release of an IMDb movie.
+   * Searches the site by the Cinemeta title (the site also matches original
+   * titles) and accepts a candidate only if its page links the same IMDb id.
    * @private
    * @param {string} id - IMDB ID
-   * @returns {Promise<object | null>} Release object
+   * @returns {Promise<object | null>} Release with prefetched movieDetails
    */
   async _findImdbRelease(id) {
-    const catalogQuery = { search: "", skip: 0, limit: 100 };
-    const releases = await this.cineCalidadService.performQuery(catalogQuery);
-
-    return releases.find((r) => this._createStremioId(r) === id);
-  }
-
-  /**
-   * Create Stremio ID from release
-   * @private
-   * @param {object} release - Release object
-   * @returns {string|null} Stremio ID
-   */
-  _createStremioId(release) {
-    if (release.id) {
-      return `cc_${release.id}`;
+    const meta = await this.metadataService.getMovieMetadata({
+      id,
+      type: "movie",
+    });
+    const title = meta?.originalTitle || meta?.title;
+    if (!title) {
+      logger.debug("No Cinemeta title for IMDb id", { id });
+      return null;
     }
-    if (release.imdbId && release.imdbId.startsWith("tt")) {
-      return release.imdbId;
+
+    const releases = await this.cineCalidadService.performQuery({
+      search: title,
+      skip: 0,
+      limit: 20,
+      maxPages: 1,
+      matchTitle: false,
+    });
+
+    const year = parseInt(meta.year, 10);
+    const candidates = releases
+      .filter((r) => !r.id.endsWith("_4k"))
+      .filter((r) => {
+        const releaseYear = parseInt(r.year, 10);
+        return !year || !releaseYear || Math.abs(releaseYear - year) <= 1;
+      })
+      .slice(0, this.MAX_IMDB_CANDIDATES);
+
+    for (const release of candidates) {
+      const movieDetails = await this.cineCalidadService.getMovieDetails(
+        release.detailsLink,
+      );
+      if (movieDetails?.imdbId === id) {
+        return { ...release, imdbId: id, movieDetails };
+      }
     }
+
+    logger.debug("IMDb id not found on Cinecalidad", {
+      id,
+      title,
+      candidates: candidates.length,
+    });
     return null;
   }
 
