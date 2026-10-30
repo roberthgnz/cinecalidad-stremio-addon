@@ -3,6 +3,8 @@
  * Provides structured error types, codes, and context
  */
 
+const logger = require("../../lib/logger");
+
 class AppError extends Error {
   constructor(code, message, cause = null) {
     super(message);
@@ -144,13 +146,13 @@ class ErrorHandler {
         error.code === ErrorCodes.DATA_NOT_FOUND
       ) {
         // These are expected errors, log as debug/info
-        require("./logger").info("Expected error occurred", errorInfo);
+        logger.info("Expected error occurred", errorInfo);
       } else {
-        require("./logger").error("Application error occurred", errorInfo);
+        logger.error("Application error occurred", errorInfo);
       }
     } else {
       // Unexpected errors should be logged as errors
-      require("./logger").error("Unexpected error occurred", errorInfo);
+      logger.error("Unexpected error occurred", errorInfo);
     }
 
     return {
@@ -207,7 +209,7 @@ class RetryHandler {
           maxDelay,
         );
 
-        require("./logger").debug("Retrying operation", {
+        logger.debug("Retrying operation", {
           attempt,
           maxAttempts,
           delay,

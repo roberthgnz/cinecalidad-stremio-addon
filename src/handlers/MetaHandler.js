@@ -231,7 +231,7 @@ class MetaHandler {
    */
   async _getSavedMovie(id, context) {
     try {
-      const savedMovie = this.database.getMovie(id);
+      const savedMovie = await this.database.getMovie(id);
 
       if (savedMovie?.meta) {
         logger.debug("Found saved movie in database", context);
@@ -256,7 +256,9 @@ class MetaHandler {
    */
   async _getCatalogMovie(movieId, context) {
     try {
-      const catalogMovie = this.database.findMovieByOriginalId(movieId);
+      const catalogMovie = await this.database.findMovieByOriginalId(
+        movieId,
+      );
 
       if (!catalogMovie) {
         return null;
@@ -548,7 +550,7 @@ class MetaHandler {
         lastUpdated: new Date().toISOString(),
       };
 
-      this.database.saveMovie(id, updatedData);
+      await this.database.saveMovie(id, updatedData);
     } catch (error) {
       logger.warn("Failed to save built metadata", {
         id,
@@ -564,7 +566,7 @@ class MetaHandler {
         lastUpdated: new Date().toISOString(),
       };
 
-      this.database.saveMovie(id, dataWithTimestamp);
+      await this.database.saveMovie(id, dataWithTimestamp);
     } catch (error) {
       logger.warn("Failed to save scraped movie", { id, error: error.message });
     }

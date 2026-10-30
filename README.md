@@ -11,6 +11,7 @@ This addon follows enterprise-grade patterns with proper separation of concerns:
 
 ```
 src/
+├── worker.js             # Cloudflare Workers entry (fetch + cron)
 ├── addon.js              # Main addon factory and DI container
 ├── handlers/             # Request handlers
 │   ├── CatalogHandler.js # Movie catalog management
@@ -71,8 +72,9 @@ src/
 
 ### Prerequisites
 
-- Node.js 16+
-- npm or pnpm
+- Node.js 22.13+ (uses the built-in `node:sqlite` for local runs)
+- pnpm 9+
+- A Cloudflare account (for deployment)
 
 ### Installation
 
@@ -82,10 +84,14 @@ git clone https://github.com/your-username/cinecalidad-stremio-addon.git
 cd cinecalidad-stremio-addon
 
 # Install dependencies
-npm install
+pnpm install
 
-# Start the addon
-npm start
+# Run on the Workers runtime locally (http://127.0.0.1:8787)
+pnpm db:migrate:local
+pnpm dev:worker
+
+# ...or run the plain Node/Express server (http://127.0.0.1:7000)
+pnpm start
 ```
 
 ### Configuration
@@ -150,10 +156,10 @@ logger.info("Request processed", {
   success: true,
 });
 
-// Performance monitoring
-const startTime = process.hrtime.bigint();
+// Performance monitoring (works on Node and Workers)
+const startTime = performance.now();
 // ... process request ...
-const duration = Number(process.hrtime.bigint() - startTime) / 1000000;
+const duration = performance.now() - startTime;
 ```
 
 ## 🔧 Development
@@ -183,10 +189,48 @@ const duration = Number(process.hrtime.bigint() - startTime) / 1000000;
 
 ## 🚀 Production Deployment
 
+### Cloudflare Workers (primary)
+
+The addon runs as a Cloudflare Worker (`src/worker.js`) with a D1 database
+for caching movie, torrent and metadata lookups. A cron trigger every 30
+minutes purges expired cache rows.
+
+| Piece | Node server | Cloudflare |
+| --- | --- | --- |
+| HTTP | Express + `getRouter` (`index.js`) | `fetch` handler (`src/worker.js`) |
+| Database | `node:sqlite` file via `lib/sqlite-d1-adapter.js` | D1 binding `DB` |
+| Schema | `migrations/*.sql` (applied at startup) | `wrangler d1 migrations apply` |
+| Cleanup | `setInterval` | Cron trigger `*/30 * * * *` |
+
+One-time setup:
+
+```bash
+pnpm wrangler login
+pnpm wrangler d1 create cinecalidad   # copy the database_id into wrangler.jsonc
+pnpm deploy                           # applies migrations, then deploys
+```
+
+Your addon is then served at
+`https://cinecalidad-stremio-addon.<your-subdomain>.workers.dev/manifest.json`.
+
+CI deploys on every push to `main` via
+`.github/workflows/deploy-cloudflare.yml`. Add these repository secrets:
+
+- `CLOUDFLARE_API_TOKEN` — token with *Workers Scripts: Edit* and *D1: Edit*
+- `CLOUDFLARE_ACCOUNT_ID`
+
+Logs: `pnpm cf:tail`. Variables (`LOG_LEVEL`, `CINEMETA_URL`) live under
+`vars` in `wrangler.jsonc`; local overrides go in `.dev.vars` (git-ignored).
+
+> **Plan limits:** a catalog request scrapes up to 3–6 pages and a stream
+> request several detail pages. That fits the Workers Free plan's
+> subrequest limit, but HTML parsing can exceed its 10 ms CPU budget per
+> request; if you see `exceededCpu` errors in the logs, use Workers Paid.
+
 ### Docker
 
 ```dockerfile
-FROM node:20-alpine
+FROM node:22-alpine
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --only=production
@@ -201,6 +245,7 @@ CMD ["npm", "start"]
 NODE_ENV=production
 PORT=7000
 LOG_LEVEL=info
+DATABASE_PATH=./data/cinecalidad.db
 ```
 
 ## 🤝 Contributing

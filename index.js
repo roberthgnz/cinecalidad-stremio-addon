@@ -6,10 +6,16 @@
 
 "use strict";
 
+const path = require("path");
 const express = require("express");
 const { config, getAddonUrl } = require("./config/settings.js");
-const { createAddon } = require("./src/addon.js");
+const { createAddon, Constants } = require("./src/addon.js");
+const { configure: configureDatabase } = require("./lib/database");
+const { SqliteD1Adapter } = require("./lib/sqlite-d1-adapter");
 const logger = require("./lib/logger");
+
+const DATABASE_PATH =
+  process.env.DATABASE_PATH || path.join(__dirname, "data", "cinecalidad.db");
 
 /**
  * Application class
@@ -20,6 +26,8 @@ class CineCalidadApp {
     this.app = express();
     this.server = null;
     this.addon = null;
+    this.database = null;
+    this.cleanupInterval = null;
   }
 
   /**
@@ -52,6 +60,11 @@ class CineCalidadApp {
    */
   async _initializeAddon() {
     try {
+      this.database = configureDatabase(new SqliteD1Adapter(DATABASE_PATH));
+      this.cleanupInterval = setInterval(() => {
+        this.database.cleanup();
+      }, Constants.CACHE_CLEANUP_INTERVAL);
+
       this.addon = await createAddon();
       logger.info("Addon initialized successfully");
     } catch (error) {
@@ -181,6 +194,11 @@ class CineCalidadApp {
    */
   async shutdown() {
     logger.info("Shutting down application...");
+
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
 
     if (this.server) {
       return new Promise((resolve) => {

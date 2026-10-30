@@ -1,11 +1,16 @@
 {
   "name": "cinecalidad-stremio-addon",
   "version": "1.0.0",
-  "description": "A Stremio addon for streaming movies from Cinecalidad.",
+  "description": "A Stremio addon for streaming movies from Cinecalidad, running on Cloudflare Workers.",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
+    "dev:worker": "wrangler dev",
+    "deploy": "wrangler d1 migrations apply DB --remote && wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "cf:tail": "wrangler tail",
     "test": "jest --verbose \"--runInBand\" \"--detectOpenHandles\" \"--forceExit\"",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
@@ -21,32 +26,26 @@
     "docker:compose:up": "docker-compose up -d",
     "docker:compose:down": "docker-compose down",
     "docker:compose:logs": "docker-compose logs -f",
-    "build": "echo 'No build step required'",
-    "release": "echo 'Ready for deployment'"
+    "build": "wrangler deploy --dry-run --outdir dist"
   },
   "keywords": [
     "stremio",
     "addon",
     "local-files",
-    "streaming"
+    "streaming",
+    "cloudflare-workers"
   ],
   "author": "",
   "license": "ISC",
   "engines": {
-    "node": ">=20.0.0",
+    "node": ">=22.13.0",
     "pnpm": ">=9.0.0"
   },
   "dependencies": {
-    "better-sqlite3": "^12.2.0",
     "cheerio": "^1.1.2",
     "express": "^5.1.0",
-    "mime-types": "^2.1.35",
-    "name-to-imdb": "^3.0.4",
-    "node-fetch": "^2.7.0",
-    "parse-torrent": "9.1.5",
+    "magnet-uri": "6.2.0",
     "parse-torrent-title": "^1.4.0",
-    "sequelize": "^6.37.7",
-    "sqlite3": "^5.1.7",
     "stremio-addon-sdk": "^1.6.10"
   },
   "devDependencies": {
@@ -60,7 +59,8 @@
     "eslint-plugin-prettier": "^5.5.4",
     "jest": "^29.7.0",
     "nodemon": "^3.0.1",
-    "supertest": "^6.3.3"
+    "supertest": "^6.3.3",
+    "wrangler": "4.156.0"
   },
   "jest": {
     "testEnvironment": "node",
@@ -77,6 +77,13 @@
     "testMatch": [
       "**/__tests__/**/*.js",
       "**/?(*.)+(spec|test).js"
+    ],
+    "setupFiles": [
+      "<rootDir>/tests/setup.js"
+    ],
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "/.wrangler/"
     ]
   }
 }

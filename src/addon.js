@@ -6,7 +6,8 @@
 
 "use strict";
 
-const { addonBuilder } = require("stremio-addon-sdk");
+// Builder only: the SDK index also pulls in express-based servers
+const AddonBuilder = require("stremio-addon-sdk/src/builder");
 const { getManifest, config } = require("../config/settings.js");
 const CineCalidadService = require("../services/cine-calidad-service.js");
 const TorrentParserService = require("../services/torrent-parser-service.js");
@@ -147,7 +148,6 @@ class CineCalidadAddon {
     this.container = new DependencyContainer();
     this.builder = null;
     this.handlers = new Map();
-    this.cleanupInterval = null;
   }
 
   /**
@@ -158,8 +158,6 @@ class CineCalidadAddon {
     try {
       await this.container.initialize();
       await this._initializeHandlers();
-      this._setupCleanup();
-      this._setupGracefulShutdown();
       this._buildAddon();
 
       logger.info("Cinecalidad addon initialized successfully");
@@ -183,53 +181,10 @@ class CineCalidadAddon {
   }
 
   /**
-   * Setup periodic cleanup
-   * @private
-   */
-  _setupCleanup() {
-    this.cleanupInterval = setInterval(() => {
-      this._performCleanup();
-    }, Constants.CACHE_CLEANUP_INTERVAL);
-  }
-
-  /**
-   * Perform cleanup operations
-   * @private
-   */
-  _performCleanup() {
-    try {
-      const database = this.container.get("database");
-      database.cleanup();
-      logger.debug("Database cleanup completed successfully");
-    } catch (error) {
-      logger.error("Database cleanup failed", { error: error.message });
-    }
-  }
-
-  /**
-   * Setup graceful shutdown handlers
-   * @private
-   */
-  _setupGracefulShutdown() {
-    const shutdown = (signal) => {
-      logger.info(`${signal} received, shutting down gracefully...`);
-      this._shutdown();
-    };
-
-    process.on("SIGINT", () => shutdown("SIGINT"));
-    process.on("SIGTERM", () => shutdown("SIGTERM"));
-  }
-
-  /**
    * Shutdown the addon gracefully
    */
   async shutdown() {
     try {
-      if (this.cleanupInterval) {
-        clearInterval(this.cleanupInterval);
-        this.cleanupInterval = null;
-      }
-
       // Shutdown handlers if they have cleanup methods
       if (
         this.catalogHandler &&
@@ -259,25 +214,12 @@ class CineCalidadAddon {
   }
 
   /**
-   * Shutdown the addon
-   * @private
-   */
-  _shutdown() {
-    this.shutdown()
-      .then(() => {
-        process.exit(0);
-      })
-      .catch(() => {
-        process.exit(1);
-      });
-  }
-
-  /**
    * Build the Stremio addon
    * @private
    */
   _buildAddon() {
-    this.builder = addonBuilder(getManifest());
+    // `new`: the SDK builder assigns to `this`, which is undefined in strict-mode bundles
+    this.builder = new AddonBuilder(getManifest());
 
     // Define handlers
     this.builder.defineCatalogHandler(this._createCatalogHandler());
@@ -293,7 +235,7 @@ class CineCalidadAddon {
   _createCatalogHandler() {
     return async (args) => {
       const requestId = this._generateRequestId();
-      const startTime = process.hrtime.bigint();
+      const startTime = performance.now();
 
       try {
         logger.info("Catalog request initiated", {
@@ -305,7 +247,7 @@ class CineCalidadAddon {
         const handler = this.handlers.get("catalog");
         const result = await handler.handle(args);
 
-        const duration = Number(process.hrtime.bigint() - startTime) / 1000000; // Convert to ms
+        const duration = performance.now() - startTime; // ms
 
         logger.info("Catalog request completed", {
           requestId,
@@ -316,7 +258,7 @@ class CineCalidadAddon {
 
         return result;
       } catch (error) {
-        const duration = Number(process.hrtime.bigint() - startTime) / 1000000;
+        const duration = performance.now() - startTime;
 
         logger.error("Catalog request failed", {
           requestId,
@@ -341,7 +283,7 @@ class CineCalidadAddon {
   _createMetaHandler() {
     return async (args) => {
       const requestId = this._generateRequestId();
-      const startTime = process.hrtime.bigint();
+      const startTime = performance.now();
 
       try {
         logger.info("Meta request initiated", {
@@ -353,7 +295,7 @@ class CineCalidadAddon {
         const handler = this.handlers.get("meta");
         const result = await handler.handle(args);
 
-        const duration = Number(process.hrtime.bigint() - startTime) / 1000000;
+        const duration = performance.now() - startTime;
 
         logger.info("Meta request completed", {
           requestId,
@@ -364,7 +306,7 @@ class CineCalidadAddon {
 
         return result;
       } catch (error) {
-        const duration = Number(process.hrtime.bigint() - startTime) / 1000000;
+        const duration = performance.now() - startTime;
 
         logger.error("Meta request failed", {
           requestId,
@@ -389,7 +331,7 @@ class CineCalidadAddon {
   _createStreamHandler() {
     return async (args) => {
       const requestId = this._generateRequestId();
-      const startTime = process.hrtime.bigint();
+      const startTime = performance.now();
 
       try {
         logger.info("Stream request initiated", {
@@ -401,7 +343,7 @@ class CineCalidadAddon {
         const handler = this.handlers.get("stream");
         const result = await handler.handle(args);
 
-        const duration = Number(process.hrtime.bigint() - startTime) / 1000000;
+        const duration = performance.now() - startTime;
 
         logger.info("Stream request completed", {
           requestId,
@@ -412,7 +354,7 @@ class CineCalidadAddon {
 
         return result;
       } catch (error) {
-        const duration = Number(process.hrtime.bigint() - startTime) / 1000000;
+        const duration = performance.now() - startTime;
 
         logger.error("Stream request failed", {
           requestId,

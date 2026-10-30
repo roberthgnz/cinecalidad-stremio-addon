@@ -57,12 +57,12 @@ class TorrentInfoService {
       logger.debug("Processing magnet link", { name: link.name });
 
       // Get torrent info (cached or fresh)
-      let magnetInfo = this.database.getTorrent(link.url);
+      let magnetInfo = await this.database.getTorrent(link.url);
 
       if (!magnetInfo) {
         magnetInfo = await this._fetchTorrentInfo(link.url);
         if (magnetInfo) {
-          this.database.saveTorrent(link.url, magnetInfo);
+          await this.database.saveTorrent(link.url, magnetInfo);
         }
       } else {
         logger.debug("Using cached torrent info", { name: link.name });

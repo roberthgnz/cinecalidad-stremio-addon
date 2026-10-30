@@ -14,14 +14,9 @@ class CacheService {
       sets: 0,
       errors: 0,
     };
-
-    // Start periodic cleanup
-    this.cleanupInterval = setInterval(
-      () => {
-        this._performCleanup();
-      },
-      5 * 60 * 1000,
-    ); // Every 5 minutes
+    this.startedAt = Date.now();
+    // Expired rows are purged by the scheduled cleanup (cron on Workers,
+    // interval in the Node server); reads already ignore expired entries
   }
 
   /**
@@ -35,7 +30,7 @@ class CacheService {
 
     try {
       const startTime = Date.now();
-      const result = this.database.getCache(key);
+      const result = await this.database.getCache(key);
       const duration = Date.now() - startTime;
 
       if (result) {
@@ -72,7 +67,7 @@ class CacheService {
 
     try {
       const startTime = Date.now();
-      this.database.setCache(key, value, ttlMinutes);
+      await this.database.setCache(key, value, ttlMinutes);
       const duration = Date.now() - startTime;
 
       this.stats.sets++;
@@ -95,7 +90,7 @@ class CacheService {
     const cacheContext = { ...context, cacheKey: key, operation: "delete" };
 
     try {
-      this.database.deleteCache(key);
+      await this.database.deleteCache(key);
       logger.debug("Cache delete successful", cacheContext);
       return true;
     } catch (error) {
@@ -211,7 +206,7 @@ class CacheService {
           ? ((stats.errors / stats.totalRequests) * 100).toFixed(2)
           : 0,
       totalRequests: stats.totalRequests,
-      uptime: process.uptime(),
+      uptime: (Date.now() - this.startedAt) / 1000,
     };
   }
 
@@ -222,7 +217,7 @@ class CacheService {
   async _performCleanup() {
     try {
       const startTime = Date.now();
-      this.database.clearExpiredCache();
+      await this.database.clearExpiredCache();
       const duration = Date.now() - startTime;
 
       logger.debug("Cache cleanup completed", { duration });
@@ -235,11 +230,6 @@ class CacheService {
    * Shutdown cache service gracefully
    */
   shutdown() {
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = null;
-    }
-
     logger.info("Cache service shut down", { finalStats: this.getStats() });
   }
 }

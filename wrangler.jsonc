@@ -1,0 +1,31 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "cinecalidad-stremio-addon",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-10-30",
+  // Buffer (magnet-uri) and process.env (config/logger) come from nodejs_compat
+  "compatibility_flags": ["nodejs_compat"],
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "cinecalidad",
+      "database_id": "32b42cff-5004-487c-ac2d-83f6bdbf9200",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // Purge expired cache rows and stale movies (replaces the Node setInterval)
+  "triggers": {
+    "crons": ["*/30 * * * *"]
+  },
+
+  "vars": {
+    "LOG_LEVEL": "info",
+    "CINEMETA_URL": "https://v3-cinemeta.strem.io"
+  },
+
+  "observability": {
+    "enabled": true
+  }
+}

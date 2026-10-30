@@ -1,4 +1,4 @@
-const parseTorrent = require("parse-torrent");
+const parseMagnet = require("magnet-uri");
 const parseTorrentTitle = require("parse-torrent-title");
 const logger = require("../lib/logger");
 
@@ -6,15 +6,8 @@ class TorrentParserService {
   constructor() {
     this.torrentCache = new Map();
     this.cacheTimeout = 30 * 60 * 1000; // 30 minutes
-    this.cleanupIntervalId = null;
-
-    // Clean up cache every 30 minutes
-    this.cleanupIntervalId = setInterval(
-      () => {
-        this.cleanupCache();
-      },
-      30 * 60 * 1000,
-    );
+    // Expired entries are evicted lazily on read (no timers: Workers
+    // can't run background intervals)
   }
 
   // Singleton instance
@@ -31,10 +24,6 @@ class TorrentParserService {
    * Clean up resources
    */
   destroy() {
-    if (this.cleanupIntervalId) {
-      clearInterval(this.cleanupIntervalId);
-      this.cleanupIntervalId = null;
-    }
     this.torrentCache.clear();
   }
 
@@ -89,12 +78,13 @@ class TorrentParserService {
           );
           return cached.data;
         }
+        this.torrentCache.delete(cacheKey);
       }
 
-      // Parse magnet URI using parse-torrent
+      // Parse magnet URI using magnet-uri
       let torrentInfo;
       try {
-        const parsed = parseTorrent(magnetUri);
+        const parsed = parseMagnet(magnetUri);
         torrentInfo = this.extractTorrentInfo(parsed);
 
         // Cache the result
@@ -111,7 +101,7 @@ class TorrentParserService {
         return torrentInfo;
       } catch (parseError) {
         logger.warn(
-          `[TorrentParserService] Failed to parse with parse-torrent, falling back to basic parsing:`,
+          `[TorrentParserService] Failed to parse with magnet-uri, falling back to basic parsing:`,
           parseError.message,
         );
 
@@ -136,7 +126,7 @@ class TorrentParserService {
 
   /**
    * Extract detailed information from parsed torrent using parse-torrent-title
-   * @param {Object} parsed - Parsed torrent object from parse-torrent
+   * @param {Object} parsed - Parsed torrent object from magnet-uri
    * @returns {Object} Extracted torrent information
    */
   extractTorrentInfo(parsed) {

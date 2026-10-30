@@ -141,7 +141,7 @@ class StreamHandler {
    */
   async _getMovieData(id) {
     // Check database first
-    const savedMovie = this.database.getMovie(id);
+    const savedMovie = await this.database.getMovie(id);
     if (savedMovie && savedMovie.movieDetails) {
       logger.debug("Found saved movie data in database", { id });
       return savedMovie;
@@ -181,7 +181,7 @@ class StreamHandler {
         lastUpdated: new Date().toISOString(),
       };
 
-      this.database.saveMovie(id, movieData);
+      await this.database.saveMovie(id, movieData);
       return movieData;
     } catch (error) {
       logger.error("Failed to fetch movie data", { id, error: error.message });

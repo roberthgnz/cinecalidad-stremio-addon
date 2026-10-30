@@ -1,6 +1,5 @@
-const fetch = require("node-fetch");
 const cheerio = require("cheerio");
-const nameToImdb = require("name-to-imdb");
+const { findImdb } = require("../lib/imdb-search");
 const logger = require("../lib/logger");
 
 /**
@@ -336,11 +335,11 @@ class CineCalidadService {
         console.log(`[getMovieDetails] Extracted IMDB ID from page: ${imdbId}`);
       }
 
-      // Get complete movie information from IMDB using name-to-imdb
+      // Get complete movie information from IMDB using IMDb search
       let movieInfo = null;
       if (title) {
         console.log(
-          `[getMovieDetails] Getting complete movie info from IMDB using name-to-imdb...`,
+          `[getMovieDetails] Getting complete movie info from IMDB using IMDb search...`,
         );
         movieInfo = await this.getMovieInfoFromImdb(title, year);
         console.log(
@@ -348,7 +347,7 @@ class CineCalidadService {
           movieInfo ? "Found" : "Not found",
         );
 
-        // Use the IMDB ID from name-to-imdb if we didn't find it on the page
+        // Use the IMDB ID from IMDb search if we didn't find it on the page
         if (movieInfo && !imdbId) {
           imdbId = movieInfo.imdbId;
         }
@@ -382,14 +381,14 @@ class CineCalidadService {
         year: movieInfo?.year || year,
         poster:
           movieInfo?.poster || (poster ? this.getAbsoluteUrl(poster) : null),
-        description: pageDescription || null, // Use page description since name-to-imdb doesn't provide plot
-        genre: null, // name-to-imdb doesn't provide genre info
-        director: null, // name-to-imdb doesn't provide director info
-        cast: movieInfo?.starring || null, // Use starring actors from name-to-imdb
-        duration: null, // name-to-imdb doesn't provide duration
-        rating: null, // name-to-imdb doesn't provide rating
-        country: null, // name-to-imdb doesn't provide country
-        language: null, // name-to-imdb doesn't provide language
+        description: pageDescription || null, // Use page description since IMDb search doesn't provide plot
+        genre: null, // IMDb search doesn't provide genre info
+        director: null, // IMDb search doesn't provide director info
+        cast: movieInfo?.starring || null, // Use starring actors from IMDb search
+        duration: null, // IMDb search doesn't provide duration
+        rating: null, // IMDb search doesn't provide rating
+        country: null, // IMDb search doesn't provide country
+        language: null, // IMDb search doesn't provide language
         starring: movieInfo?.starring || null, // Main actors
         type: movieInfo?.type || "movie",
         sourceUrl: movieUrl,
@@ -511,7 +510,7 @@ class CineCalidadService {
   }
 
   /**
-   * Get complete movie information using name-to-imdb
+   * Get complete movie information using IMDb search
    * @param {string} title - Movie title
    * @param {string} year - Movie year (optional)
    * @returns {Promise<Object|null>} Complete movie information or null
@@ -534,67 +533,49 @@ class CineCalidadService {
       console.log(`[getMovieInfoFromImdb] Cleaned title: "${cleanTitle}"`);
       console.log(`[getMovieInfoFromImdb] Search year: ${year}`);
 
-      return new Promise((resolve) => {
-        const searchOptions = {
-          name: cleanTitle,
-          year: year ? parseInt(year) : undefined,
-        };
+      const searchOptions = {
+        name: cleanTitle,
+        year: year ? parseInt(year) : undefined,
+      };
 
-        console.log(`[getMovieInfoFromImdb] Search options:`, searchOptions);
+      console.log(`[getMovieInfoFromImdb] Search options:`, searchOptions);
 
-        nameToImdb(searchOptions, (err, res, inf) => {
-          if (err) {
-            console.error(
-              `[getMovieInfoFromImdb] Error getting movie info for "${cleanTitle}":`,
-              err.message,
-            );
-            resolve(null);
-            return;
-          }
+      const meta = await findImdb(searchOptions);
+      console.log(`[getMovieInfoFromImdb] Raw result from IMDb search:`, meta);
 
-          console.log(
-            `[getMovieInfoFromImdb] Raw result from name-to-imdb:`,
-            res,
-          );
-          console.log(`[getMovieInfoFromImdb] Additional info:`, inf);
+      if (!meta || !meta.id || !meta.id.startsWith("tt")) {
+        console.log(
+          `[getMovieInfoFromImdb] No valid movie info found for "${cleanTitle}"`,
+        );
+        return null;
+      }
 
-          if (res && res.startsWith("tt") && inf && inf.meta) {
-            // Extract information from the inf.meta object
-            const meta = inf.meta;
-            const movieInfo = {
-              imdbId: res,
-              title: meta.name || cleanTitle,
-              year: meta.year || year,
-              poster: meta.image ? meta.image.src : null,
-              starring: meta.starring || null, // This contains main actors
-              type: meta.type || "movie",
-              // Note: name-to-imdb doesn't provide detailed metadata like genre, director, etc.
-              // We'll need to keep these as null and rely on page extraction or other sources
-              genre: null,
-              director: null,
-              cast: meta.starring || null, // Use starring as cast
-              duration: null,
-              rating: null,
-              description: null,
-              country: null,
-              language: null,
-            };
+      const movieInfo = {
+        imdbId: meta.id,
+        title: meta.name || cleanTitle,
+        year: meta.year || year,
+        poster: meta.image ? meta.image.src : null,
+        starring: meta.starring || null, // This contains main actors
+        type: meta.type || "movie",
+        // Note: IMDb suggestions don't provide detailed metadata like genre, director, etc.
+        // We'll need to keep these as null and rely on page extraction or other sources
+        genre: null,
+        director: null,
+        cast: meta.starring || null, // Use starring as cast
+        duration: null,
+        rating: null,
+        description: null,
+        country: null,
+        language: null,
+      };
 
-            console.log(
-              `[getMovieInfoFromImdb] Found complete movie info for: ${movieInfo.title} (${movieInfo.year}) - ${movieInfo.imdbId}`,
-            );
-            console.log(
-              `[getMovieInfoFromImdb] Starring: ${movieInfo.starring}, Type: ${movieInfo.type}`,
-            );
-            resolve(movieInfo);
-          } else {
-            console.log(
-              `[getMovieInfoFromImdb] No valid movie info found for "${cleanTitle}"`,
-            );
-            resolve(null);
-          }
-        });
-      });
+      console.log(
+        `[getMovieInfoFromImdb] Found complete movie info for: ${movieInfo.title} (${movieInfo.year}) - ${movieInfo.imdbId}`,
+      );
+      console.log(
+        `[getMovieInfoFromImdb] Starring: ${movieInfo.starring}, Type: ${movieInfo.type}`,
+      );
+      return movieInfo;
     } catch (error) {
       logger.error(
         `[getMovieInfoFromImdb] Error in getMovieInfoFromImdb for "${title}":`,
@@ -605,7 +586,7 @@ class CineCalidadService {
   }
 
   /**
-   * Get IMDB ID using name-to-imdb (legacy method, kept for compatibility)
+   * Get IMDB ID using IMDb search (legacy method, kept for compatibility)
    * @param {string} title - Movie title
    * @param {string} year - Movie year (optional)
    * @returns {Promise<string|null>} IMDB ID or null

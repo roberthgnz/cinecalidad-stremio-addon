@@ -1,0 +1,46 @@
+name: Deploy to Cloudflare Workers
+
+on:
+  push:
+    branches: [ main ]
+    paths-ignore: [ 'docs/**', '**.md' ]
+  workflow_dispatch:
+
+concurrency:
+  group: cloudflare-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy Worker
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22.x'
+
+    - name: Install pnpm
+      run: npm install -g pnpm@9
+
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+
+    - name: Run tests
+      run: pnpm test
+
+    # Requires repo secrets CLOUDFLARE_API_TOKEN (Workers Scripts:Edit, D1:Edit)
+    # and CLOUDFLARE_ACCOUNT_ID
+    - name: Apply D1 migrations and deploy
+      uses: cloudflare/wrangler-action@v3
+      with:
+        apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        packageManager: pnpm
+        command: |
+          d1 migrations apply DB --remote
+          deploy

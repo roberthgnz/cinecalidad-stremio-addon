@@ -11,3 +11,8 @@ dist/
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Cloudflare Wrangler
+.wrangler/
+.dev.vars*
+!.dev.vars.example
