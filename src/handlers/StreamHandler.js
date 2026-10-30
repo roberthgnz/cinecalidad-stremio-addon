@@ -394,7 +394,6 @@ class StreamHandler {
         externalUrl: link.url,
         behaviorHints: {
           bingeGroup: `${this.BINGE_GROUP_PREFIX}${bingeGroupId}`,
-          countryWhitelist: this.COUNTRY_WHITELIST,
         },
       };
     });

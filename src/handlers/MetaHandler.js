@@ -256,9 +256,7 @@ class MetaHandler {
    */
   async _getCatalogMovie(movieId, context) {
     try {
-      const catalogMovie = await this.database.findMovieByOriginalId(
-        movieId,
-      );
+      const catalogMovie = await this.database.findMovieByOriginalId(movieId);
 
       if (!catalogMovie) {
         return null;

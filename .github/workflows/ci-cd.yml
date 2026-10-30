@@ -1,129 +1,37 @@
-name: CI/CD Pipeline
+name: CI
 
 on:
   push:
     branches: [ main, develop ]
   pull_request:
     branches: [ main ]
-  release:
-    types: [ published, created ]
 
 jobs:
   test:
-    name: Test Suite
+    name: Lint and test
     runs-on: ubuntu-latest
-    
-    strategy:
-      matrix:
-        node-version: [22.x]
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-        
-    - name: Install pnpm
-      run: npm install -g pnpm
-        
-    - name: Get pnpm store directory
-      shell: bash
-      run: |
-        echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-        
-    - name: Setup pnpm cache
-      uses: actions/cache@v3
-      with:
-        path: ${{ env.STORE_PATH }}
-        key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-        restore-keys: |
-          ${{ runner.os }}-pnpm-store-
-        
-    - name: Install dependencies
-      run: pnpm install --no-frozen-lockfile
-      
-    - name: Run linting
-      run: pnpm run lint:check
-      
-    - name: Run tests
-      run: pnpm test
-      
-    - name: Run integration tests
-      run: |
-        pnpm start &
-        sleep 10
-        pnpm run test:meta
-        pkill -f "node index.js"
-      timeout-minutes: 5
 
-  build:
-    name: Build Application
-    runs-on: ubuntu-latest
-    needs: test
-    if: github.event_name == 'release' || github.ref == 'refs/heads/main'
-    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '22.x'
-        
-    - name: Install pnpm
-      run: npm install -g pnpm
-        
-    - name: Install dependencies
-      run: pnpm install --no-frozen-lockfile --prod
-      
-    - name: Create production build
-      run: |
-        mkdir -p dist
-        cp -r lib/ dist/
-        cp -r src/ dist/
-        cp -r config/ dist/
-        cp -r services/ dist/
-        cp index.js dist/
-        cp package*.json dist/
-        
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-${{ github.sha }}
-        path: dist/
-        retention-days: 30
-        echo "🚀 Deployed to: $DEPLOY_URL"
-        
-    - name: Update deployment status
-      if: always()
-      run: |
-        if [ "${{ steps.deploy.outcome }}" == "success" ]; then
-          echo "✅ Deployment successful!"
-          echo "📍 URL: ${{ steps.deploy.outputs.deploy-url }}"
-        else
-          echo "❌ Deployment failed!"
-          exit 1
-        fi
 
-  notify:
-    name: Notify Deployment Status
-    runs-on: ubuntu-latest
-    needs: [deploy]
-    if: always() && github.event_name == 'release'
-    
-    steps:
-    - name: Notify success
-      if: needs.deploy.result == 'success'
-      run: |
-        echo "🎉 Release ${{ github.event.release.tag_name }} deployed successfully!"
-        echo "🔗 Live at: ${{ needs.deploy.outputs.deploy-url }}"
-        
-    - name: Notify failure
-      if: needs.deploy.result == 'failure'
-      run: |
-        echo "💥 Deployment failed for release ${{ github.event.release.tag_name }}"
-        exit 1
+    - name: Install pnpm
+      run: npm install -g pnpm@9
+
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+
+    - name: Run linting
+      run: pnpm run lint:check
+
+    - name: Run tests
+      run: pnpm test
+
+    # Bundles src/worker.js the same way `wrangler deploy` does, without uploading
+    - name: Build Worker bundle
+      run: pnpm run build

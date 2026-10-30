@@ -171,11 +171,11 @@ class TorrentInfoService {
         infoHash: magnetInfo.hash,
         fileIdx: file.index,
         sources: sources.length > 0 ? sources : undefined,
-        videoSize: file.size || undefined,
-        filename: file.name || undefined,
+        // Stremio reads filename/videoSize from behaviorHints (subtitle matching)
         behaviorHints: {
           bingeGroup: `cinecalidad-${bingeGroupId}`,
-          countryWhitelist: this.COUNTRY_WHITELIST,
+          videoSize: file.size || undefined,
+          filename: file.name || undefined,
         },
       };
     });
@@ -208,15 +208,16 @@ class TorrentInfoService {
         infoHash: magnetInfo.hash,
         fileIdx: magnetInfo.mainVideoFile ? magnetInfo.mainVideoFile.index : 0,
         sources: sources.length > 0 ? sources : undefined,
-        videoSize: magnetInfo.mainVideoFile
-          ? magnetInfo.mainVideoFile.size
-          : magnetInfo.totalSize,
-        filename: magnetInfo.mainVideoFile
-          ? magnetInfo.mainVideoFile.name
-          : magnetInfo.displayName,
         behaviorHints: {
           bingeGroup: `cinecalidad-${bingeGroupId}`,
-          countryWhitelist: this.COUNTRY_WHITELIST,
+          // Magnets carry no size; 0 would mislead subtitle addons
+          videoSize:
+            (magnetInfo.mainVideoFile
+              ? magnetInfo.mainVideoFile.size
+              : magnetInfo.totalSize) || undefined,
+          filename: magnetInfo.mainVideoFile
+            ? magnetInfo.mainVideoFile.name
+            : magnetInfo.displayName,
         },
       },
     ];

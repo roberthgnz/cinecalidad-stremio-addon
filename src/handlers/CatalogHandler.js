@@ -328,7 +328,12 @@ class CatalogHandler {
    * @returns {Array|undefined} Array of genres or undefined
    */
   _getGenres(release) {
-    if (release.category && typeof release.category === "string") {
+    // "movie" is the content type, not a genre
+    if (
+      release.category &&
+      typeof release.category === "string" &&
+      release.category !== "movie"
+    ) {
       return [release.category];
     }
     return undefined;
